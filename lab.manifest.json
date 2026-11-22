@@ -1,0 +1,40 @@
+{
+  "id": "secops-soar",
+  "title": "Live SecOps Detection & Automated SOAR",
+  "domainLabel": "SecOps & SOAR",
+  "description": "Inject live attack telemetry, match Sigma detection rules in real time, and execute automated SOAR containment (CAEP Universal Logout, WAF IP/ASN Block, Agent Kill Switch) with deterministic MTTD/MTTR timelines.",
+  "repo": "c2pig/0trust-lab-secops-soar",
+  "routePath": "/secops-soar",
+  "standaloneUrl": "https://lab.0trust.dev/secops-soar",
+  "localDevPort": 5181,
+  "archetype": "B",
+  "seats": [
+    {
+      "id": "compromised-user",
+      "persona": "Tyler Brooks",
+      "roleLabel": "Target Identity · Compromised Session",
+      "appLabel": "Workforce Session & Cloud App"
+    },
+    {
+      "id": "soc-analyst",
+      "persona": "Amina Diallo",
+      "roleLabel": "SOC Tier 2 · Detection & SOAR",
+      "appLabel": "SIEM Queue & SOAR Playbook Engine"
+    }
+  ],
+  "apiEndpoints": [
+    "/api/secops-soar/ingest",
+    "/api/secops-soar/contain"
+  ],
+  "kvPrefixes": [
+    "lab6:soar:"
+  ],
+  "infraDependencies": [
+    "managed-infrastructure/modules/cloudflare-pages-lab",
+    "Cloudflare STATE_KV (lab6:soar:* 1h TTL)"
+  ],
+  "diagrams": {
+    "localArchitectureMd": "docs/ARCHITECTURE.md",
+    "zoominSvg": "docs/diagrams/secops_soar_architecture.svg"
+  }
+}
