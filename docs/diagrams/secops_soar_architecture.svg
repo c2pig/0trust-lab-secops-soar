@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif">
+  <defs>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb" />
+    </marker>
+    <marker id="arr-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#059669" />
+    </marker>
+    <marker id="arr-crimson" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#dc2626" />
+    </marker>
+  </defs>
+
+  <rect width="1200" height="720" fill="#f8fafc" />
+
+  <text x="40" y="42" fill="#0f172a" font-size="20" font-weight="700">Lab 6 Architecture — Live SecOps Detection &amp; Automated SOAR (/secops-soar)</text>
+  <text x="40" y="64" fill="#64748b" font-size="13">Archetype B: 2-Seat Incident War Room (Tyler Brooks ↔ Amina Diallo) · Sigma Matcher · CAEP Universal Logout · WAF &amp; Kill Switch</text>
+
+  <!-- Column 1: 2-Seat War Room & Attack Injector -->
+  <rect x="40" y="92" width="350" height="390" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+  <rect x="58" y="108" width="280" height="22" rx="4" fill="#eff6ff" />
+  <text x="68" y="123" fill="#1e40af" font-size="11" font-weight="700">PHASES 1–2 · 2-SEAT WAR ROOM &amp; INJECTOR</text>
+
+  <rect x="58" y="144" width="314" height="96" rx="8" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="72" y="166" fill="#1e40af" font-size="13" font-weight="700">2-Seat RoleSwitcherBar (Archetype B)</text>
+  <text x="72" y="185" fill="#1e3a8a" font-size="11.5">• Seat 1: Tyler Brooks (Target · Compromised Session)</text>
+  <text x="72" y="202" fill="#1e3a8a" font-size="11.5">• Seat 2: Amina Diallo (SOC Tier 2 · SOAR Engine)</text>
+  <text x="72" y="224" fill="#2563eb" font-size="10.5" font-family="monospace">src/components/RoleSwitcherBar.tsx</text>
+
+  <rect x="58" y="256" width="314" height="114" rx="8" fill="#fef2f2" stroke="#fecaca" />
+  <text x="72" y="278" fill="#991b1b" font-size="13" font-weight="700">Attack Telemetry Injector (6A / 6B / 6C)</text>
+  <text x="72" y="297" fill="#7f1d1d" font-size="11.5">6A: Credential Stuffing (401/429 Burst · AS49870)</text>
+  <text x="72" y="314" fill="#7f1d1d" font-size="11.5">6B: Impossible Travel (Tokyo → Frankfurt in 4m)</text>
+  <text x="72" y="331" fill="#7f1d1d" font-size="11.5">6C: Public Bucket ACL + CANARY-TOKEN-7741</text>
+  <text x="72" y="354" fill="#dc2626" font-size="10.5" font-family="monospace">POST /api/secops-soar/ingest</text>
+
+  <rect x="58" y="384" width="314" height="82" rx="8" fill="#f8fafc" stroke="#cbd5e1" />
+  <text x="72" y="406" fill="#0f172a" font-size="12.5" font-weight="700">Edge Session Store (STATE_KV)</text>
+  <text x="72" y="424" fill="#475569" font-size="11.5">Key: lab6:soar:&lt;sessionId&gt; · 1h TTL (3600s)</text>
+  <text x="72" y="442" fill="#475569" font-size="11.5">$0/mo Client-Side Fallback in vite dev</text>
+
+  <line x1="390" y1="286" x2="425" y2="286" stroke="#2563eb" stroke-width="2" marker-end="url(#arr-blue)" />
+
+  <!-- Column 2: Sigma Matcher & SOAR Playbooks -->
+  <rect x="425" y="92" width="365" height="390" rx="12" fill="#ffffff" stroke="#10b981" stroke-width="1.5" />
+  <rect x="443" y="108" width="300" height="22" rx="4" fill="#ecfdf5" />
+  <text x="453" y="123" fill="#047857" font-size="11" font-weight="700">PHASE 3 · SIGMA MATCHER &amp; SOAR PLAYBOOKS</text>
+
+  <rect x="443" y="144" width="329" height="108" rx="8" fill="#f8fafc" stroke="#cbd5e1" />
+  <text x="457" y="166" fill="#0f172a" font-size="13" font-weight="700">Real-Time Sigma Rule Matcher</text>
+  <text x="457" y="185" fill="#475569" font-size="11.5">• SIGMA-AUTH-001 (T1110.004 · High)</text>
+  <text x="457" y="202" fill="#475569" font-size="11.5">• SIGMA-GEO-002 (T1078 · Critical)</text>
+  <text x="457" y="219" fill="#475569" font-size="11.5">• SIGMA-CLOUD-003 (T1530 · Critical)</text>
+  <text x="457" y="238" fill="#059669" font-size="10.5" font-family="monospace">MTTD: 260ms–420ms deterministic</text>
+
+  <rect x="443" y="268" width="329" height="198" rx="8" fill="#ecfdf5" stroke="#a7f3d0" />
+  <text x="457" y="290" fill="#065f46" font-size="13" font-weight="700">Automated SOAR Containment Webhooks</text>
+  <text x="457" y="312" fill="#047857" font-size="11.5">1. WAF_BLOCK_ASN → Cloudflare 403 Edge Block</text>
+  <text x="457" y="332" fill="#047857" font-size="11.5">2. CAEP_UNIVERSAL_LOGOUT → 401 Session Revoked</text>
+  <text x="457" y="352" fill="#047857" font-size="11.5">3. AGENT_KILL_SWITCH → 423 IAM Deny * Quarantine</text>
+  <text x="457" y="380" fill="#065f46" font-size="11">Modes: Manual Playbook vs. Auto-Remediate</text>
+  <text x="457" y="400" fill="#059669" font-size="10.5" font-family="monospace">POST /api/secops-soar/contain</text>
+  <text x="457" y="420" fill="#059669" font-size="10.5" font-family="monospace">functions/api/secops-soar/contain.ts</text>
+  <text x="457" y="446" fill="#047857" font-size="11">Verifies containment on Tyler Brooks Seat</text>
+
+  <line x1="790" y1="286" x2="825" y2="286" stroke="#059669" stroke-width="2" marker-end="url(#arr-emerald)" />
+
+  <!-- Column 3: Reflection & X-Ray Drawer -->
+  <rect x="825" y="92" width="335" height="390" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+  <rect x="843" y="108" width="275" height="22" rx="4" fill="#f1f5f9" />
+  <text x="853" y="123" fill="#334155" font-size="11" font-weight="700">PHASE 4 · TIMELINE &amp; X-RAY DRAWER</text>
+
+  <rect x="843" y="144" width="299" height="146" rx="8" fill="#f8fafc" stroke="#cbd5e1" />
+  <text x="857" y="166" fill="#0f172a" font-size="13" font-weight="700">MTTD / MTTR Incident Timeline</text>
+  <text x="857" y="186" fill="#475569" font-size="11.5">T+0ms: Telemetry Ingested</text>
+  <text x="857" y="204" fill="#475569" font-size="11.5">T+310ms: Sigma Rule Matched (MTTD)</text>
+  <text x="857" y="222" fill="#475569" font-size="11.5">T+640ms: Auto-SOAR Contained (MTTR)</text>
+  <text x="857" y="244" fill="#2563eb" font-size="11">Copy / Export Post-Incident JSON</text>
+  <text x="857" y="268" fill="#475569" font-size="10.5" font-family="monospace">src/engine/secopsSoarEngine.ts</text>
+
+  <rect x="843" y="306" width="299" height="160" rx="8" fill="#0f172a" />
+  <text x="857" y="328" fill="#93c5fd" font-size="13" font-weight="700">Sticky XRayTelemetryDrawer</text>
+  <text x="857" y="348" fill="#e2e8f0" font-size="11.5">• Security Audit Feed (W3C traceparent)</text>
+  <text x="857" y="366" fill="#e2e8f0" font-size="11.5">• Normalized Telemetry Events JSON</text>
+  <text x="857" y="384" fill="#e2e8f0" font-size="11.5">• Matched Sigma Rule YAML/JSON</text>
+  <text x="857" y="402" fill="#e2e8f0" font-size="11.5">• SOAR Webhook Dispatch Payloads</text>
+  <text x="857" y="420" fill="#e2e8f0" font-size="11.5">• MTTD / MTTR Timeline Proof</text>
+  <text x="857" y="446" fill="#64748b" font-size="10.5" font-family="monospace">functions/api/_middleware.ts</text>
+
+  <!-- Bottom Infrastructure Bar -->
+  <rect x="40" y="510" width="1120" height="168" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="60" y="540" fill="#0f172a" font-size="14" font-weight="700">Cloudflare Pages + managed-infrastructure Provisioning Boundary</text>
+  <text x="60" y="564" fill="#475569" font-size="12">• Standalone URL: https://lab.0trust.dev/secops-soar (routed via 0trust-lab-router → 0trust-lab-secops-soar.pages.dev)</text>
+  <text x="60" y="586" fill="#475569" font-size="12">• Terraform: infra/terraform/main.tf → git::https://github.com/c2pig/managed-infrastructure.git//modules/cloudflare-pages-lab</text>
+  <text x="60" y="608" fill="#475569" font-size="12">• CI/CD: .github/workflows/deploy.yml (Pages deploy), diagram-check.yml (PR sync guard), sync-to-hub.yml (repository_dispatch)</text>
+  <text x="60" y="630" fill="#059669" font-size="12" font-weight="600">• Security Invariants: MAX_BODY_BYTES=64KB · Strict Set-based enum allowlists · Cache-Control: no-store · 1h STATE_KV TTL</text>
+  <text x="60" y="654" fill="#64748b" font-size="11" font-family="monospace">c2pig/0trust-lab-secops-soar · localDevPort: 5181 · STATE_KV prefix: lab6:soar:</text>
+</svg>
