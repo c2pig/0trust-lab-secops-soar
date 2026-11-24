@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-server/
+.wrangler/
 .env
 .env.local
 .DS_Store
