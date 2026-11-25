@@ -1,25 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Activity,
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
-  Clock,
-  Copy,
-  Download,
-  Lock,
   Play,
   RotateCcw,
   ShieldAlert,
-  ShieldCheck,
   Terminal,
   Zap
 } from 'lucide-react';
 import {
   ATTACK_SCENARIOS,
   AttackScenarioId,
-  SOAR_PLAYBOOKS,
   SecopsSoarSeatId,
   SecopsSoarState,
   SoarActionId,
@@ -37,6 +29,11 @@ import {
   XRayDecodedProofSection,
   XRayTelemetryDrawer
 } from '../components/XRayTelemetryDrawer';
+import {
+  AccessProbeResult,
+  SoarWarRoomPractice
+} from '../components/secops-soar/SoarWarRoomPractice';
+import { SoarReflectionSection } from '../components/secops-soar/SoarReflectionSection';
 import { ObservabilitySpan } from '../types';
 
 export interface SecopsSoarPageProps {
@@ -57,11 +54,7 @@ export const SecopsSoarPage: React.FC<SecopsSoarPageProps> = ({ onBack }) => {
   const [spans, setSpans] = useState<ObservabilitySpan[]>([]);
   const [busy, setBusy] = useState(false);
   const [copiedNotice, setCopiedNotice] = useState(false);
-  const [probeResult, setProbeResult] = useState<{
-    status: number;
-    code: string;
-    message: string;
-  } | null>(null);
+  const [probeResult, setProbeResult] = useState<AccessProbeResult | null>(null);
 
   const handleReset = useCallback(() => {
     setState(createInitialSecopsState(createSecopsSessionId()));
@@ -640,353 +633,31 @@ export const SecopsSoarPage: React.FC<SecopsSoarPageProps> = ({ onBack }) => {
 
           {/* PHASE 3: PRACTICE (2-Seat War Room) */}
           {state.active_phase === 3 && (
-            <section className="surface-card" style={{ marginTop: '16px' }}>
-              <div className="section-header">
-                <h2 className="section-title">
-                  Phase 3 · Practice:{' '}
-                  {state.active_seat === 'soc-analyst'
-                    ? 'SOC Tier 2 Playbook Engine (Amina Diallo)'
-                    : 'Target Identity Session & Cloud App (Tyler Brooks)'}
-                </h2>
-                <p className="section-subtitle">
-                  {state.active_seat === 'soc-analyst'
-                    ? 'Execute SOAR containment playbooks against the active incident, then switch to Tyler Brooks seat to verify session revocation.'
-                    : 'Probe Tyler Brooks active session and cloud app access to verify CAEP Universal Logout, WAF block, or Kill Switch containment.'}
-                </p>
-              </div>
-
-              {!state.incident_id && (
-                <div
-                  style={{
-                    marginTop: '14px',
-                    padding: '12px 14px',
-                    borderRadius: '10px',
-                    background: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '10px'
-                  }}
-                >
-                  <span style={{ fontSize: '0.84rem', color: '#92400e' }}>
-                    No attack telemetry injected yet. Inject{' '}
-                    <strong>{activeScenarioDef.shortLabel}</strong> now or return to Phase 2.
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-primary"
-                    disabled={busy}
-                    onClick={() =>
-                      void handleInjectTelemetry(state.selected_scenario, state.auto_remediate)
-                    }
-                  >
-                    <Play size={13} />
-                    <span>Quick-Inject {activeScenarioDef.code}</span>
-                  </button>
-                </div>
-              )}
-
-              {state.active_seat === 'soc-analyst' ? (
-                <div style={{ marginTop: '16px' }}>
-                  <div className="grid-3" style={{ gap: '14px' }}>
-                    {(Object.keys(SOAR_PLAYBOOKS) as SoarActionId[]).map((actionId) => {
-                      const playbook = SOAR_PLAYBOOKS[actionId];
-                      const isExecuted = state.executed_actions.includes(actionId);
-                      const isRecommended =
-                        activeScenarioDef.recommendedAction === actionId;
-
-                      return (
-                        <div
-                          key={actionId}
-                          className={`surface-card${isRecommended ? ' surface-card-featured' : ''}`}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            gap: '12px'
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                              <span
-                                className={`badge ${
-                                  isExecuted
-                                    ? 'badge-emerald'
-                                    : isRecommended
-                                      ? 'badge-amber'
-                                      : 'badge-blue'
-                                }`}
-                              >
-                                {isExecuted
-                                  ? 'EXECUTED'
-                                  : isRecommended
-                                    ? 'RECOMMENDED'
-                                    : 'STANDBY'}
-                              </span>
-                            </div>
-                            <h3 style={{ margin: '10px 0 6px', fontSize: '0.95rem', color: '#0f172a' }}>
-                              {playbook.title}
-                            </h3>
-                            <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
-                              {playbook.description}
-                            </p>
-                          </div>
-
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${isExecuted ? 'btn-emerald' : 'btn-primary'}`}
-                            disabled={busy}
-                            onClick={() => void handleExecuteContainment(actionId)}
-                          >
-                            {isExecuted ? <CheckCircle2 size={14} /> : <Zap size={14} />}
-                            <span>{isExecuted ? playbook.badgeText : 'Execute Playbook'}</span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: '16px',
-                      padding: '12px 14px',
-                      borderRadius: '10px',
-                      background: '#eff6ff',
-                      border: '1px solid #bfdbfe',
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '10px'
-                    }}
-                  >
-                    <span style={{ fontSize: '0.84rem', color: '#1e3a8a' }}>
-                      Switch to <strong>Tyler Brooks (Target Identity)</strong> seat to prove live session revocation &amp; edge block.
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-dark"
-                      onClick={() => handleSelectSeat('compromised-user')}
-                    >
-                      <span>Switch to Tyler Brooks Seat</span>
-                      <ArrowRight size={13} />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: '16px' }}>
-                  <div className="grid-2" style={{ gap: '16px' }}>
-                    <div className="surface-card" style={{ background: '#f8fafc' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                        <strong>Tyler Brooks · Workforce Session Status</strong>
-                        <span
-                          className={`badge ${
-                            state.compromised_user_revoked ? 'badge-crimson' : 'badge-emerald'
-                          }`}
-                        >
-                          {state.compromised_user_revoked ? 'CAEP REVOKED (401)' : 'JWT ACTIVE'}
-                        </span>
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.84rem', color: '#334155', lineHeight: 1.7 }}>
-                        <li>
-                          Identity: <code>tyler.brooks@0trust.dev</code>
-                        </li>
-                        <li>
-                          CAEP Universal Logout:{' '}
-                          <strong>{state.compromised_user_revoked ? 'REVOKED' : 'NOT TRIGGERED'}</strong>
-                        </li>
-                        <li>
-                          Cloudflare Edge WAF:{' '}
-                          <strong>{state.waf_blocked ? '403 ASN BLOCKED' : 'ALLOWING'}</strong>
-                        </li>
-                        <li>
-                          IAM / Bucket Kill Switch:{' '}
-                          <strong>{state.kill_switch_active ? 'QUARANTINED (Deny *)' : 'NORMAL'}</strong>
-                        </li>
-                      </ul>
-
-                      <div style={{ marginTop: '14px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-primary"
-                          onClick={handleProbeUserAccess}
-                        >
-                          <Lock size={13} />
-                          <span>Test Cloud App Access</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          onClick={() => handleSelectSeat('soc-analyst')}
-                        >
-                          Return to SOC Analyst Seat
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="surface-card" style={{ background: '#ffffff' }}>
-                      <strong style={{ display: 'block', marginBottom: '8px' }}>
-                        Live Access Probe Result
-                      </strong>
-                      {probeResult ? (
-                        <div
-                          style={{
-                            padding: '12px',
-                            borderRadius: '8px',
-                            background:
-                              probeResult.status === 200 ? '#fef2f2' : '#ecfdf5',
-                            border: `1px solid ${
-                              probeResult.status === 200 ? '#fecaca' : '#a7f3d0'
-                            }`
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                            {probeResult.status === 200 ? (
-                              <AlertTriangle size={16} color="#dc2626" />
-                            ) : (
-                              <ShieldCheck size={16} color="#059669" />
-                            )}
-                            <span className="mono" style={{ fontWeight: 700, fontSize: '0.84rem' }}>
-                              HTTP {probeResult.status} · {probeResult.code}
-                            </span>
-                          </div>
-                          <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
-                            {probeResult.message}
-                          </p>
-                        </div>
-                      ) : (
-                        <p style={{ margin: 0, fontSize: '0.83rem', color: '#64748b' }}>
-                          Click <strong>Test Cloud App Access</strong> to verify whether Tyler Brooks&apos;s compromised
-                          session is still active or blocked by SOAR containment.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                <button type="button" className="btn btn-sm" onClick={() => handleSetPhase(2)}>
-                  Back to Understanding
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleSetPhase(4)}
-                >
-                  <span>Proceed to Phase 4: MTTD/MTTR Reflection</span>
-                  <ArrowRight size={15} />
-                </button>
-              </div>
-            </section>
+            <SoarWarRoomPractice
+              state={state}
+              activeScenarioDef={activeScenarioDef}
+              busy={busy}
+              probeResult={probeResult}
+              onInjectTelemetry={(scenario, autoRemediate) =>
+                void handleInjectTelemetry(scenario, autoRemediate)
+              }
+              onExecuteContainment={(action) => void handleExecuteContainment(action)}
+              onSelectSeat={handleSelectSeat}
+              onProbeUserAccess={handleProbeUserAccess}
+              onSetPhase={handleSetPhase}
+            />
           )}
 
           {/* PHASE 4: REFLECTION */}
           {state.active_phase === 4 && (
-            <section className="surface-card" style={{ marginTop: '16px' }}>
-              <div className="section-header">
-                <h2 className="section-title">Phase 4 · Reflection: MTTD / MTTR Timeline &amp; Export</h2>
-                <p className="section-subtitle">
-                  Review deterministic detection and containment latency, compare manual vs. automated SOAR MTTR, and
-                  export the post-incident tabletop summary.
-                </p>
-              </div>
-
-              <div className="grid-3" style={{ marginTop: '16px', gap: '14px' }}>
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.8rem' }}>
-                    <Clock size={14} />
-                    <span>Mean Time to Detect (MTTD)</span>
-                  </div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', marginTop: '6px' }}>
-                    {state.mttd_ms !== null ? `${state.mttd_ms} ms` : 'Not measured'}
-                  </div>
-                </div>
-
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.8rem' }}>
-                    <Zap size={14} />
-                    <span>Mean Time to Respond (MTTR)</span>
-                  </div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#059669', marginTop: '6px' }}>
-                    {state.mttr_ms !== null ? `${state.mttr_ms} ms` : 'Pending'}
-                  </div>
-                </div>
-
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.8rem' }}>
-                    <ShieldCheck size={14} />
-                    <span>Auto vs Manual Delta</span>
-                  </div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#2563eb', marginTop: '8px' }}>
-                    {activeScenarioDef.autoMttrMs}ms vs {activeScenarioDef.manualMttrMs}ms
-                  </div>
-                </div>
-              </div>
-
-              {/* Chronological Timeline */}
-              <div className="surface-card" style={{ marginTop: '16px', background: '#f8fafc' }}>
-                <strong style={{ display: 'block', marginBottom: '10px' }}>
-                  Chronological Post-Incident Timeline
-                </strong>
-                {state.timeline.length === 0 ? (
-                  <p style={{ margin: 0, fontSize: '0.83rem', color: '#64748b' }}>
-                    Inject an attack scenario in Phase 2 and execute SOAR containment in Phase 3 to populate the
-                    post-incident timeline.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {state.timeline.map((entry, idx) => (
-                      <div
-                        key={`${entry.phase}-${idx}`}
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          justifyContent: 'space-between',
-                          gap: '8px'
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#0f172a' }}>
-                            <span className="mono" style={{ color: '#2563eb', marginRight: '8px' }}>
-                              T+{entry.t_plus_ms}ms
-                            </span>
-                            {entry.title}
-                          </div>
-                          <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '3px' }}>
-                            {entry.detail}
-                          </div>
-                        </div>
-                        <span className="badge badge-blue">{entry.actor}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Export Actions */}
-              <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '10px' }}>
-                <button type="button" className="btn btn-sm" onClick={() => handleSetPhase(3)}>
-                  Back to Practice
-                </button>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button type="button" className="btn btn-sm btn-dark" onClick={handleCopyReport}>
-                    <Copy size={14} />
-                    <span>{copiedNotice ? 'Copied JSON!' : 'Copy Post-Incident JSON'}</span>
-                  </button>
-                  <button type="button" className="btn btn-sm btn-primary" onClick={handleDownloadReport}>
-                    <Download size={14} />
-                    <span>Export Tabletop Report</span>
-                  </button>
-                </div>
-              </div>
-            </section>
+            <SoarReflectionSection
+              state={state}
+              activeScenarioDef={activeScenarioDef}
+              copiedNotice={copiedNotice}
+              onSetPhase={handleSetPhase}
+              onCopyReport={handleCopyReport}
+              onDownloadReport={handleDownloadReport}
+            />
           )}
         </div>
       </main>
