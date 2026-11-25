@@ -1,6 +1,9 @@
 import { timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
-import { onRequest as observabilityMiddleware } from '../functions/api/_middleware';
+import {
+  onRequest as observabilityMiddleware,
+  type EdgeMiddlewareEnv
+} from '../functions/api/_middleware';
 import { onRequestPost as containPost } from '../functions/api/secops-soar/contain';
 import {
   onRequestPost as ingestPost,
@@ -9,12 +12,10 @@ import {
 } from '../functions/api/secops-soar/ingest';
 import { createKvAdapter } from './kvAdapter';
 
-export interface CloudRunEnv extends SecopsEnv {
+export interface CloudRunEnv extends SecopsEnv, EdgeMiddlewareEnv {
   LAB_SLUG?: string;
   LAB_ROUTER_SECRET?: string;
   FIRESTORE_COLLECTION?: string;
-  OTLP_ENDPOINT?: string;
-  OTLP_AUTH_HEADER?: string;
 }
 
 export function verifyRouterSecret(
@@ -44,6 +45,7 @@ export function createCloudRunApp(options?: {
   const app = new Hono();
   const baseEnv: CloudRunEnv = options?.env ?? {
     ENVIRONMENT: process.env.ENVIRONMENT || (process.env.K_SERVICE ? 'production' : 'development'),
+    OTEL_SERVICE_NAME: process.env.OTEL_SERVICE_NAME,
     LAB_SLUG: process.env.LAB_SLUG || 'secops-soar',
     LAB_ROUTER_SECRET: process.env.LAB_ROUTER_SECRET,
     FIRESTORE_COLLECTION: process.env.FIRESTORE_COLLECTION || 'kv_state',
