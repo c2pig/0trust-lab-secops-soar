@@ -275,10 +275,12 @@ describe('Lab 6 (secops-soar) Cloud Run Adapter — Red-Team & Security Invarian
       );
 
       await new Promise((r) => setTimeout(r, 10));
-      assert.equal(capturedOtlpBodies.length, 1);
-      assert.ok(!capturedOtlpBodies[0].includes(TEST_ROUTER_SECRET));
-      assert.ok(!capturedOtlpBodies[0].includes('SuperSecretSignatureXYZ123'));
-      assert.ok(!capturedOtlpBodies[0].includes(otlpAuthSecret));
+      assert.equal(capturedOtlpBodies.length, 2);
+      for (const otlpBody of capturedOtlpBodies) {
+        assert.ok(!otlpBody.includes(TEST_ROUTER_SECRET));
+        assert.ok(!otlpBody.includes('SuperSecretSignatureXYZ123'));
+        assert.ok(!otlpBody.includes(otlpAuthSecret));
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }
