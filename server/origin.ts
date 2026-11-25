@@ -1,7 +1,5 @@
 const DEFAULT_ALLOWED_FORWARDED_HOSTS = new Set<string>([
   'lab.0trust.dev',
-  'localhost:5181',
-  '127.0.0.1:5181',
   'localhost:8080',
   '127.0.0.1:8080'
 ]);

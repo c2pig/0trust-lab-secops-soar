@@ -5,6 +5,7 @@
   "description": "Inject live attack telemetry, match Sigma detection rules in real time, and execute automated SOAR containment (CAEP Universal Logout, WAF IP/ASN Block, Agent Kill Switch) with deterministic MTTD/MTTR timelines.",
   "repo": "c2pig/0trust-lab-secops-soar",
   "routePath": "/secops-soar",
+  "apiPrefix": "/api/secops-soar",
   "standaloneUrl": "https://lab.0trust.dev/secops-soar",
   "localDevPort": 5181,
   "archetype": "B",

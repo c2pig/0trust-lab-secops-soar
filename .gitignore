@@ -6,3 +6,6 @@ dist-server/
 .env.local
 .DS_Store
 *.log
+.terraform/
+*.tfstate
+*.tfstate.*

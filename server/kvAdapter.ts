@@ -1,5 +1,10 @@
 import { Firestore, Timestamp } from '@google-cloud/firestore';
-import type { KVNamespace } from '../functions/api/secops-soar/ingest';
+
+export interface KVNamespace {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
 
 export interface FirestoreKvDoc {
   value: string;
@@ -171,7 +176,7 @@ export function createKvAdapter(options?: {
   env?: NodeJS.ProcessEnv;
 }): KVNamespace {
   const env = options?.env ?? process.env;
-  const labSlug = options?.labSlug || env.LAB_SLUG || 'secops-soar';
+  const labSlug = options?.labSlug || env.LAB_SLUG || 'unknown-lab';
   const collectionName = options?.collectionName || env.FIRESTORE_COLLECTION || 'kv_state';
 
   if (shouldUseFirestore(env)) {
