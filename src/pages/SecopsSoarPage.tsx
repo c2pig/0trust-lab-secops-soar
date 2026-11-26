@@ -1,25 +1,19 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Activity,
-  ArrowLeft,
-  ArrowRight,
-  Play,
-  RotateCcw,
-  ShieldAlert,
-  Terminal,
-  Zap
-} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Briefcase, Compass, Download, RotateCcw, ShieldCheck } from 'lucide-react';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
 import {
   ATTACK_SCENARIOS,
   AttackScenarioId,
+  SOAR_PLAYBOOKS,
   SecopsSoarSeatId,
   SecopsSoarState,
-  SoarActionId,
-  SoarPhase
+  SoarActionId
 } from '../contracts/secopsSoarContract';
 import {
   createInitialSecopsState,
   createSecopsSessionId,
+  createTraceparent,
   executeSoarContainment,
   exportPostIncidentReport,
   ingestAttackTelemetry
@@ -29,182 +23,339 @@ import {
   XRayDecodedProofSection,
   XRayTelemetryDrawer
 } from '../components/XRayTelemetryDrawer';
-import {
-  AccessProbeResult,
-  SoarWarRoomPractice
-} from '../components/secops-soar/SoarWarRoomPractice';
-import { SoarReflectionSection } from '../components/secops-soar/SoarReflectionSection';
 import { ObservabilitySpan } from '../types';
 
 export interface SecopsSoarPageProps {
   onBack: () => void;
 }
 
-const PHASE_LABELS: { phase: SoarPhase; title: string; subtitle: string }[] = [
-  { phase: 1, title: '1. Discovery', subtitle: 'Telemetry & Sigma Pipeline' },
-  { phase: 2, title: '2. Understanding', subtitle: 'Inject Attack & Match Sigma' },
-  { phase: 3, title: '3. Practice', subtitle: 'SOAR Containment & Verify' },
-  { phase: 4, title: '4. Reflection', subtitle: 'MTTD / MTTR Timeline' }
+interface AccessProbeResult {
+  appName: string;
+  status: number;
+  code: string;
+  message: string;
+}
+
+const SCENARIO_ORDER: AttackScenarioId[] = [
+  'IMPOSSIBLE_TRAVEL',
+  'CREDENTIAL_STUFFING',
+  'PUBLIC_BUCKET_CANARY'
 ];
 
+const PLAYBOOK_ORDER: SoarActionId[] = [
+  'CAEP_UNIVERSAL_LOGOUT',
+  'WAF_BLOCK_ASN',
+  'AGENT_KILL_SWITCH'
+];
+
+const WORKFORCE_APPS = [
+  {
+    id: 'workforce-portal',
+    name: 'Workforce Identity Portal',
+    resource: 'app/0trust-workforce-portal',
+    scope: 'SSO Profile & Directory'
+  },
+  {
+    id: 'cloud-ledger',
+    name: 'Cloud Financial Ledger',
+    resource: 'app/0trust-cloud-ledger',
+    scope: 'Read/Write Accounting Records'
+  },
+  {
+    id: 'prod-storage',
+    name: 'Production Ledger Storage',
+    resource: 's3://0trust-prod-ledger',
+    scope: 'Encrypted Bucket Artifacts'
+  }
+] as const;
+
 export const SecopsSoarPage: React.FC<SecopsSoarPageProps> = ({ onBack }) => {
-  const [state, setState] = useState<SecopsSoarState>(() =>
-    createInitialSecopsState(createSecopsSessionId())
-  );
+  const [state, setState] = useState<SecopsSoarState>(() => ({
+    ...createInitialSecopsState(createSecopsSessionId()),
+    active_seat: 'compromised-user'
+  }));
+  const stateRef = useRef<SecopsSoarState>(state);
+  stateRef.current = state;
+
   const [spans, setSpans] = useState<ObservabilitySpan[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [copiedNotice, setCopiedNotice] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<AccessProbeResult | null>(null);
+  const [verifiedAfterContain, setVerifiedAfterContain] = useState<boolean>(false);
+
+  const tourLaunchedRef = useRef<boolean>(false);
+  const bootIngestedRef = useRef<boolean>(false);
+
+  const recordSpan = useCallback((span: ObservabilitySpan) => {
+    setSpans((prev) => [span, ...prev].slice(0, 40));
+  }, []);
+
+  const seedInitialAlert = useCallback(
+    async (baseState: SecopsSoarState) => {
+      const { nextState, span } = await ingestAttackTelemetry(
+        baseState,
+        'IMPOSSIBLE_TRAVEL',
+        false
+      );
+      if (stateRef.current.session_id !== baseState.session_id) return;
+      setState({
+        ...nextState,
+        active_seat: baseState.active_seat
+      });
+      recordSpan(span);
+    },
+    [recordSpan]
+  );
+
+  useEffect(() => {
+    if (bootIngestedRef.current) return;
+    bootIngestedRef.current = true;
+    void seedInitialAlert(stateRef.current);
+  }, [seedInitialAlert]);
+
+  const startLabTour = useCallback(() => {
+    const driverObj = driver({
+      showProgress: true,
+      animate: true,
+      allowClose: true,
+      overlayOpacity: 0.5,
+      steps: [
+        {
+          popover: {
+            title: 'Lab Orientation: Live SecOps Detection & Automated SOAR',
+            description:
+              'Observe how real-time Sigma detections correlate anomalous identity and cloud events and trigger sub-second SOAR containment webhooks (CAEP Universal Logout, WAF ASN Block, and IAM Kill Switch).'
+          }
+        },
+        {
+          element: '#tour-role-switcher',
+          popover: {
+            title: 'Role Switcher',
+            description:
+              'Switch between Tyler Brooks (Employee) and Amina Diallo (Security Ops). Notification dots alert you when a live incident needs triage or when session access changes.'
+          }
+        },
+        {
+          element: '#tour-workspace',
+          popover: {
+            title: 'Role Workspace',
+            description:
+              'Start as Tyler Brooks in the Workforce SaaS Portal to confirm active session access, then switch to Amina Diallo to triage Sigma alerts and run SOAR containment playbooks.'
+          }
+        },
+        {
+          element: '.xray-drawer',
+          popover: {
+            title: 'X-Ray Telemetry Drawer',
+            description:
+              'Expand this bottom drawer anytime to inspect live HTTP spans, normalized telemetry events, matched Sigma YAML rules, SOAR webhook payloads, and MTTD/MTTR metrics.'
+          }
+        },
+        {
+          element: '#tour-lab-controls',
+          popover: {
+            title: 'Lab Controls',
+            description:
+              'Use Lab Tour to replay this orientation, or Reset to restore a clean session and fresh active incident.'
+          }
+        }
+      ]
+    });
+    driverObj.drive();
+  }, []);
+
+  useEffect(() => {
+    if (tourLaunchedRef.current) return;
+    tourLaunchedRef.current = true;
+    const timer = window.setTimeout(() => {
+      startLabTour();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [startLabTour]);
 
   const handleReset = useCallback(() => {
-    setState(createInitialSecopsState(createSecopsSessionId()));
+    const fresh: SecopsSoarState = {
+      ...createInitialSecopsState(createSecopsSessionId()),
+      active_seat: 'compromised-user'
+    };
+    stateRef.current = fresh;
+    setState(fresh);
     setSpans([]);
     setProbeResult(null);
-    setCopiedNotice(false);
-  }, []);
+    setVerifiedAfterContain(false);
+    setBusyKey(null);
+    void seedInitialAlert(fresh);
+  }, [seedInitialAlert]);
 
   const handleSelectSeat = useCallback((seatId: SecopsSoarSeatId) => {
     setState((prev) => ({ ...prev, active_seat: seatId }));
   }, []);
 
-  const handleSetPhase = useCallback((phase: SoarPhase) => {
-    setState((prev) => ({ ...prev, active_phase: phase }));
-  }, []);
-
-  const handleInjectTelemetry = useCallback(
+  const handleIngestScenario = useCallback(
     async (scenario: AttackScenarioId, autoRemediate: boolean) => {
-      setBusy(true);
+      const currentSid = stateRef.current.session_id;
+      setBusyKey(`ingest:${scenario}`);
       try {
         const { nextState, span } = await ingestAttackTelemetry(
-          state,
+          stateRef.current,
           scenario,
           autoRemediate
         );
+        if (stateRef.current.session_id !== currentSid) return;
         setState({
           ...nextState,
-          active_phase: autoRemediate ? 3 : 2
+          active_seat: stateRef.current.active_seat
         });
-        setSpans((prev) => [span, ...prev]);
+        recordSpan(span);
         setProbeResult(null);
+        setVerifiedAfterContain(false);
       } finally {
-        setBusy(false);
+        setBusyKey(null);
       }
     },
-    [state]
+    [recordSpan]
   );
 
   const handleExecuteContainment = useCallback(
     async (action: SoarActionId) => {
-      setBusy(true);
+      const currentSid = stateRef.current.session_id;
+      setBusyKey(`contain:${action}`);
       try {
-        const { nextState, span } = await executeSoarContainment(state, action);
-        setState(nextState);
-        setSpans((prev) => [span, ...prev]);
+        const { nextState, span } = await executeSoarContainment(stateRef.current, action);
+        if (stateRef.current.session_id !== currentSid) return;
+        setState({
+          ...nextState,
+          active_seat: stateRef.current.active_seat
+        });
+        recordSpan(span);
         setProbeResult(null);
+        setVerifiedAfterContain(false);
       } finally {
-        setBusy(false);
+        setBusyKey(null);
       }
     },
-    [state]
+    [recordSpan]
   );
 
-  const handleProbeUserAccess = useCallback(() => {
-    if (state.compromised_user_revoked) {
-      setProbeResult({
-        status: 401,
-        code: 'CAEP_SESSION_REVOKED',
-        message:
-          'HTTP 401 Unauthorized: Tyler Brooks session JWT was revoked via Shared Signals CAEP Universal Logout.'
-      });
-      return;
-    }
-    if (state.waf_blocked) {
-      setProbeResult({
-        status: 403,
-        code: 'WAF_ASN_BLOCKED',
-        message:
-          'HTTP 403 Forbidden: Request from attacker IP/ASN blocked at Cloudflare Edge WAF.'
-      });
-      return;
-    }
-    if (state.kill_switch_active) {
-      setProbeResult({
-        status: 423,
-        code: 'KILL_SWITCH_QUARANTINE',
-        message:
-          'HTTP 423 Locked: Workload identity quarantined with AWS IAM Deny * and bucket ACL restored to private.'
-      });
-      return;
-    }
-    setProbeResult({
-      status: 200,
-      code: 'SESSION_ACTIVE',
-      message:
-        state.incident_status === 'ACTIVE_INCIDENT'
-          ? 'HTTP 200 OK (EXPOSED): Compromised session still holds valid access until SOAR containment runs!'
-          : 'HTTP 200 OK: Normal workforce session active.'
-    });
-  }, [state]);
+  const handleOpenWorkforceApp = useCallback(
+    (appName: string, resource: string) => {
+      const cur = stateRef.current;
+      const trace = createTraceparent();
+      let result: AccessProbeResult;
 
-  const handleCopyReport = useCallback(async () => {
-    const json = exportPostIncidentReport(state);
-    try {
-      await navigator.clipboard.writeText(json);
-      setCopiedNotice(true);
-      setTimeout(() => setCopiedNotice(false), 2000);
-    } catch {
-      // Clipboard may be unavailable in headless environments
-    }
-  }, [state]);
+      if (cur.compromised_user_revoked) {
+        result = {
+          appName,
+          status: 401,
+          code: 'CAEP_SESSION_REVOKED',
+          message:
+            'HTTP 401 Unauthorized: Session JWT was revoked via Shared Signals CAEP Universal Logout.'
+        };
+      } else if (cur.waf_blocked) {
+        result = {
+          appName,
+          status: 403,
+          code: 'WAF_ASN_BLOCKED',
+          message:
+            'HTTP 403 Forbidden: Source IP/ASN blocked at Cloudflare Edge WAF.'
+        };
+      } else if (cur.kill_switch_active) {
+        result = {
+          appName,
+          status: 423,
+          code: 'KILL_SWITCH_QUARANTINE',
+          message:
+            'HTTP 423 Locked: Workload identity quarantined with explicit AWS IAM Deny * and private bucket ACL.'
+        };
+      } else {
+        result = {
+          appName,
+          status: 200,
+          code: 'SESSION_ACTIVE',
+          message: `HTTP 200 OK: Authenticated session jti-tyler-8821 granted access to ${appName}.`
+        };
+      }
+
+      setProbeResult(result);
+      if (cur.incident_status === 'CONTAINED') {
+        setVerifiedAfterContain(true);
+      }
+
+      recordSpan({
+        id: `span-probe-${Date.now().toString(36)}`,
+        traceparent: trace.traceparent,
+        trace_id: trace.trace_id,
+        span_id: trace.span_id,
+        parent_span_id: '0000000000000000',
+        session_id: cur.session_id,
+        method: 'GET',
+        path: `/api/workforce-portal/session-check?resource=${encodeURIComponent(resource)}`,
+        status: result.status,
+        latency_ms: 6,
+        timestamp: new Date().toISOString(),
+        otlp_export: 'in-lab-only',
+        redacted_auth_header: 'Bearer ***REDACTED***',
+        redaction_applied: true,
+        execution_origin: 'browser-webcrypto-fallback',
+        response_summary: {
+          app: appName,
+          resource,
+          code: result.code,
+          status: result.status
+        }
+      });
+    },
+    [recordSpan]
+  );
 
   const handleDownloadReport = useCallback(() => {
-    const json = exportPostIncidentReport(state);
+    const json = exportPostIncidentReport(stateRef.current);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `secops-soar-${state.incident_id || state.session_id}.json`;
+    a.download = `lab6-secops-soar-${stateRef.current.incident_id || stateRef.current.session_id}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [state]);
+  }, []);
+
+  const globalStatusLabel =
+    state.incident_status === 'CONTAINED'
+      ? 'Incident Contained'
+      : state.incident_status === 'ACTIVE_INCIDENT'
+        ? 'Active Incident'
+        : 'Monitoring';
 
   const seats: RoleSeatItem<SecopsSoarSeatId>[] = useMemo(() => {
-    const userBadge = state.compromised_user_revoked
-      ? { text: 'Session Revoked', tone: 'crimson' as const }
-      : state.waf_blocked
-        ? { text: 'WAF Blocked', tone: 'amber' as const }
-        : state.kill_switch_active
-          ? { text: 'Kill Switch Active', tone: 'crimson' as const }
-          : state.incident_status === 'ACTIVE_INCIDENT'
-            ? { text: 'Compromised', tone: 'amber' as const, pulse: true }
-            : { text: 'Session Active', tone: 'emerald' as const };
-
-    const socBadge =
-      state.incident_status === 'CONTAINED'
-        ? { text: 'Contained', tone: 'emerald' as const }
-        : state.incident_status === 'ACTIVE_INCIDENT'
-          ? { text: 'Active Alert', tone: 'crimson' as const, pulse: true }
-          : { text: 'Monitoring', tone: 'blue' as const };
+    const employeeUpdated = state.incident_status === 'CONTAINED' && !verifiedAfterContain;
+    const socAlertActive = state.incident_status === 'ACTIVE_INCIDENT';
 
     return [
       {
         id: 'compromised-user',
         name: 'Tyler Brooks',
-        roleLabel: 'Target Identity · Compromised Session',
-        appLabel: 'Workforce Session & Cloud App',
+        roleLabel: 'Employee',
+        appLabel: 'Workforce SaaS Portal',
         avatarInitials: 'TB',
-        badge: userBadge
+        badge: employeeUpdated
+          ? {
+              text: state.compromised_user_revoked ? 'Session Revoked' : 'Access Contained',
+              tone: 'amber',
+              pulse: true
+            }
+          : null
       },
       {
         id: 'soc-analyst',
         name: 'Amina Diallo',
-        roleLabel: 'SOC Tier 2 · Detection & SOAR',
-        appLabel: 'SIEM Queue & SOAR Playbook Engine',
+        roleLabel: 'Security Ops',
+        appLabel: 'Incident & SOAR Containment Console',
         avatarInitials: 'AD',
-        badge: socBadge
+        badge: socAlertActive
+          ? { text: '1 Active Alert', tone: 'crimson', pulse: true }
+          : null
       }
     ];
-  }, [state]);
+  }, [state.incident_status, state.compromised_user_revoked, verifiedAfterContain]);
 
   const decodedProofSections: XRayDecodedProofSection[] = useMemo(() => {
     const sections: XRayDecodedProofSection[] = [];
@@ -243,426 +394,579 @@ export const SecopsSoarPage: React.FC<SecopsSoarPageProps> = ({ onBack }) => {
     return sections;
   }, [state]);
 
-  const activeScenarioDef = ATTACK_SCENARIOS[state.selected_scenario];
+  const sessionStatusBadge = state.compromised_user_revoked ? (
+    <span className="badge badge-crimson">REVOKED · CAEP</span>
+  ) : state.waf_blocked ? (
+    <span className="badge badge-amber">WAF BLOCKED</span>
+  ) : state.kill_switch_active ? (
+    <span className="badge badge-crimson">QUARANTINED</span>
+  ) : (
+    <span className="badge badge-emerald">ACTIVE SESSION</span>
+  );
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
-      {/* Top Navigation Bar */}
-      <header className="navbar">
-        <div className="navbar-brand">
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={onBack}
-            aria-label="Back to All Labs"
-          >
-            <ArrowLeft size={14} />
-            <span>All Labs</span>
-          </button>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="brand-title">Live SecOps Detection &amp; Automated SOAR</span>
-            <span className="brand-subtitle">
-              Lab 6 · Sigma Rule Matcher · CAEP Universal Logout · WAF &amp; Kill Switch
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: 'var(--bg-canvas)',
+        color: 'var(--text-primary)'
+      }}
+    >
+      {/* 1. Compact AppShell Top Header */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          backgroundColor: 'rgba(255, 255, 255, 0.96)',
+          backdropFilter: 'blur(8px)',
+          borderBottom: '1px solid var(--border-subtle)'
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '1280px',
+            margin: '0 auto',
+            padding: '0 16px',
+            height: '56px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={onBack}
+              className="btn btn-sm"
+              style={{ padding: '5px 9px' }}
+              title="All Labs"
+            >
+              <ArrowLeft size={13} />
+              <span>All Labs</span>
+            </button>
+            <span
+              style={{
+                fontSize: '14px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Live SecOps Detection &amp; Automated SOAR
+            </span>
+            <span
+              className={`badge ${
+                state.incident_status === 'CONTAINED'
+                  ? 'badge-emerald'
+                  : state.incident_status === 'ACTIVE_INCIDENT'
+                    ? 'badge-crimson'
+                    : 'badge-blue'
+              }`}
+              style={{ whiteSpace: 'nowrap', fontSize: '12px' }}
+            >
+              {globalStatusLabel}
             </span>
           </div>
-        </div>
 
-        <div className="navbar-actions">
-          <span className="badge badge-emerald">Guided Sandbox · $0.00/mo</span>
-          <span className="badge badge-blue mono">{state.storage_mode}</span>
-          <button
-            type="button"
-            className="btn btn-sm btn-danger-soft"
-            onClick={handleReset}
-            aria-label="Reset Lab"
-          >
-            <RotateCcw size={14} />
-            <span>Reset</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <RoleSwitcherBar
+              seats={seats}
+              activeSeatId={state.active_seat}
+              onSelectSeat={handleSelectSeat}
+              variant="dropdown"
+              ariaLabel="Switch workspace persona"
+            />
+
+            <div id="tour-lab-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={startLabTour}
+                className="btn btn-sm"
+                style={{
+                  backgroundColor: 'var(--accent-primary-dim)',
+                  borderColor: 'var(--accent-primary-border)',
+                  color: 'var(--accent-primary-ink)',
+                  fontSize: '13px'
+                }}
+              >
+                <Compass size={14} />
+                <span>Lab Tour</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="btn btn-sm"
+                style={{ fontSize: '13px' }}
+              >
+                <RotateCcw size={14} />
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Main Mission Control Workspace */}
-      <main className="mission-control" style={{ flex: 1, paddingBottom: '88px' }}>
-        <div className="page-container">
-          {/* 2-Seat Role Switcher Bar */}
-          <RoleSwitcherBar
-            seats={seats}
-            activeSeatId={state.active_seat}
-            onSelectSeat={handleSelectSeat}
-            ariaLabel="SecOps & Target Identity Role Switcher"
-          />
-
-          {/* 4-Phase Cognitive Arc Stepper */}
-          <nav className="stepper-bar" aria-label="4-Phase Cognitive Arc" style={{ marginTop: '16px' }}>
-            {PHASE_LABELS.map((item) => {
-              const isActive = state.active_phase === item.phase;
-              const isCompleted = state.active_phase > item.phase;
-              return (
-                <button
-                  key={item.phase}
-                  type="button"
-                  className={`stage-pill${isActive ? ' active' : ''}${isCompleted ? ' completed' : ''}`}
-                  onClick={() => handleSetPhase(item.phase)}
-                >
-                  <span className="stage-number">{item.phase}</span>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.title}</div>
-                    <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>{item.subtitle}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Status Summary Strip */}
-          <div
-            className="surface-card"
-            style={{
-              marginTop: '16px',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '12px',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}
-          >
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-              <span
-                className={`badge ${
-                  state.incident_status === 'CONTAINED'
-                    ? 'badge-emerald'
-                    : state.incident_status === 'ACTIVE_INCIDENT'
-                      ? 'badge-crimson'
-                      : 'badge-blue'
-                }`}
+      {/* 2. Center Role Workspace */}
+      <main id="tour-workspace" style={{ flex: 1, padding: '16px', paddingBottom: '88px' }}>
+        <div
+          style={{
+            maxWidth: '1280px',
+            margin: '0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}
+        >
+          {/* ==================== SEAT 1: TYLER BROOKS — WORKFORCE SAAS PORTAL ==================== */}
+          {state.active_seat === 'compromised-user' && (
+            <section
+              aria-label="Workforce SaaS Portal"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-sm)',
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: '#0f172a',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}
               >
-                {state.incident_status === 'CONTAINED'
-                  ? 'INCIDENT CONTAINED'
-                  : state.incident_status === 'ACTIVE_INCIDENT'
-                    ? 'ACTIVE INCIDENT'
-                    : 'BASELINE HEALTHY'}
-              </span>
-              <span className="mono" style={{ fontSize: '0.8rem', color: '#475569' }}>
-                Session: {state.session_id}
-              </span>
-              {state.incident_id && (
-                <span className="mono" style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: 600 }}>
-                  Incident: {state.incident_id}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span
+                    style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '5px',
+                      backgroundColor: '#2563eb',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px'
+                    }}
+                  >
+                    <Briefcase size={15} />
+                  </span>
+                  <span style={{ fontSize: '15px', fontWeight: 700 }}>
+                    Workforce SaaS Portal
+                  </span>
+                </div>
+                <span style={{ fontSize: '13.5px', color: '#e2e8f0' }}>
+                  Tyler Brooks · Employee
                 </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.82rem', color: '#334155' }}>
-                Risk Score:{' '}
-                <strong
-                  style={{
-                    color:
-                      state.risk_score >= 80
-                        ? '#dc2626'
-                        : state.risk_score >= 50
-                          ? '#d97706'
-                          : '#059669'
-                  }}
-                >
-                  {state.risk_score}/100
-                </strong>
-              </span>
-              <span style={{ fontSize: '0.82rem', color: '#334155' }}>
-                MTTD: <strong>{state.mttd_ms !== null ? `${state.mttd_ms}ms` : '—'}</strong>
-              </span>
-              <span style={{ fontSize: '0.82rem', color: '#334155' }}>
-                MTTR: <strong>{state.mttr_ms !== null ? `${state.mttr_ms}ms` : '—'}</strong>
-              </span>
-            </div>
-          </div>
-
-          {/* PHASE 1: DISCOVERY */}
-          {state.active_phase === 1 && (
-            <section className="surface-card" style={{ marginTop: '16px' }}>
-              <div className="section-header">
-                <h2 className="section-title">Phase 1 · Discovery: Telemetry-to-SOAR Pipeline</h2>
-                <p className="section-subtitle">
-                  Trace how workforce auth logs, Cloudflare Edge WAF events, and AWS CloudTrail telemetry flow through
-                  real-time Sigma rules into automated SOAR containment webhooks.
-                </p>
               </div>
 
-              <div className="grid-2" style={{ marginTop: '16px', gap: '16px' }}>
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <Activity size={18} color="#2563eb" />
-                    <strong>1. Normalized Telemetry Sources</strong>
+              <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-canvas)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '14.5px', fontWeight: 700 }}>
+                      Signed in as <code className="mono">tyler.brooks@0trust.dev</code>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      SSO Session <code className="mono">jti-tyler-8821</code> · Primary Region: Tokyo (JP-TYO)
+                    </div>
                   </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
-                    <li><code>okta_system_log</code> — SSO logins, geo-velocity, session JTI</li>
-                    <li><code>cloudflare_edge_waf</code> — 401/429 bursts, ASN/IP reputation</li>
-                    <li><code>aws_cloudtrail</code> — S3/R2 ACL mutations &amp; canary tripwires</li>
-                  </ul>
+                  {sessionStatusBadge}
                 </div>
 
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <Terminal size={18} color="#7c3aed" />
-                    <strong>2. Sigma Rule Matcher</strong>
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
-                    <li><code>SIGMA-AUTH-001</code> — Credential Stuffing Burst (T1110.004)</li>
-                    <li><code>SIGMA-GEO-002</code> — Impossible Travel Replay (T1078)</li>
-                    <li><code>SIGMA-CLOUD-003</code> — Public Bucket + Canary Hit (T1530)</li>
-                  </ul>
-                </div>
-
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <ShieldAlert size={18} color="#d97706" />
-                    <strong>3. SIEM Incident Queue</strong>
-                  </div>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
-                    Elevates session risk score, correlates actor &amp; source ASN, and queues structured incident in{' '}
-                    <code>STATE_KV (lab6:soar:*)</code> with 1h TTL.
+                <div>
+                  <h2 style={{ fontSize: '15.5px', fontWeight: 700, margin: 0 }}>
+                    Assigned Enterprise Applications
+                  </h2>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                    Launch a corporate application to verify live SSO token validity and edge policy status.
                   </p>
                 </div>
 
-                <div className="surface-card" style={{ background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <Zap size={18} color="#059669" />
-                    <strong>4. Automated SOAR Webhooks</strong>
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
-                    <li><strong>CAEP Universal Logout</strong> — Revokes target identity JWT</li>
-                    <li><strong>Cloudflare WAF Block</strong> — Drops attacker IP/ASN at edge</li>
-                    <li><strong>Agent Kill Switch</strong> — Attaches IAM Deny * &amp; locks ACL</li>
-                  </ul>
+                <div className="data-table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Application</th>
+                        <th>Resource Identifier</th>
+                        <th>Access Scope</th>
+                        <th>Session Status</th>
+                        <th style={{ textAlign: 'right' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {WORKFORCE_APPS.map((app) => (
+                        <tr key={app.id}>
+                          <td style={{ fontWeight: 700, fontSize: '14px' }}>{app.name}</td>
+                          <td className="mono" style={{ fontSize: '13px' }}>{app.resource}</td>
+                          <td>{app.scope}</td>
+                          <td>{sessionStatusBadge}</td>
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ fontSize: '13px', padding: '6px 12px' }}
+                              onClick={() => handleOpenWorkforceApp(app.name, app.resource)}
+                            >
+                              Open App
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
 
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleSetPhase(2)}
-                >
-                  <span>Proceed to Phase 2: Attack Injector</span>
-                  <ArrowRight size={15} />
-                </button>
+                {probeResult && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      backgroundColor:
+                        probeResult.status === 200
+                          ? 'var(--accent-emerald-dim)'
+                          : 'var(--accent-crimson-dim)',
+                      border: `1px solid ${
+                        probeResult.status === 200
+                          ? 'var(--accent-emerald-border)'
+                          : 'var(--accent-crimson-border)'
+                      }`,
+                      color:
+                        probeResult.status === 200
+                          ? 'var(--accent-emerald-ink)'
+                          : 'var(--accent-crimson-ink)',
+                      fontSize: '13.5px'
+                    }}
+                  >
+                    <strong>
+                      {probeResult.appName} ({probeResult.code}):
+                    </strong>{' '}
+                    {probeResult.message}
+                  </div>
+                )}
               </div>
             </section>
           )}
 
-          {/* PHASE 2: UNDERSTANDING */}
-          {state.active_phase === 2 && (
-            <section className="surface-card" style={{ marginTop: '16px' }}>
-              <div className="section-header">
-                <h2 className="section-title">Phase 2 · Understanding: Attack Telemetry Injector</h2>
-                <p className="section-subtitle">
-                  Select an attack scenario and remediation mode, then inject live telemetry to watch Sigma rules match
-                  and generate a SIEM incident.
-                </p>
-              </div>
-
-              {/* Remediation Mode Toggle */}
+          {/* ==================== SEAT 2: AMINA DIALLO — INCIDENT & SOAR CONTAINMENT CONSOLE ==================== */}
+          {state.active_seat === 'soc-analyst' && (
+            <section
+              aria-label="Incident and SOAR Containment Console"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-sm)',
+                overflow: 'hidden'
+              }}
+            >
               <div
                 style={{
-                  marginTop: '14px',
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  background: '#f1f5f9',
+                  padding: '10px 18px',
+                  backgroundColor: 'var(--bg-canvas)',
+                  borderBottom: '1px solid var(--border-subtle)',
                   display: 'flex',
-                  flexWrap: 'wrap',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '12px'
+                  gap: '12px',
+                  flexWrap: 'wrap'
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>
-                    SOAR Execution Mode
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: '#475569' }}>
-                    Compare manual Tier-2 analyst triage vs. sub-second automated SOAR containment.
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${!state.auto_remediate ? 'btn-dark' : ''}`}
-                    onClick={() => setState((prev) => ({ ...prev, auto_remediate: false }))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span
+                    style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '5px',
+                      backgroundColor: '#7c3aed',
+                      color: '#ffffff',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px'
+                    }}
                   >
-                    Manual SOAR Playbook
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${state.auto_remediate ? 'btn-emerald' : ''}`}
-                    onClick={() => setState((prev) => ({ ...prev, auto_remediate: true }))}
-                  >
-                    Auto-Remediate SOAR
-                  </button>
+                    SO
+                  </span>
+                  <span style={{ fontSize: '15px', fontWeight: 700 }}>
+                    Incident &amp; SOAR Containment Console
+                  </span>
                 </div>
+                <span style={{ fontSize: '13.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Amina Diallo · Security Ops
+                </span>
               </div>
 
-              {/* 3 Scenario Cards */}
-              <div className="grid-3" style={{ marginTop: '16px', gap: '14px' }}>
-                {(Object.keys(ATTACK_SCENARIOS) as AttackScenarioId[]).map((scenarioId) => {
-                  const def = ATTACK_SCENARIOS[scenarioId];
-                  const isSelected = state.selected_scenario === scenarioId;
-                  return (
-                    <div
-                      key={scenarioId}
-                      className={`surface-card${isSelected ? ' surface-card-featured' : ''}`}
-                      style={{
-                        cursor: 'pointer',
-                        borderColor: isSelected ? '#2563eb' : undefined,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        gap: '10px'
-                      }}
-                      onClick={() =>
-                        setState((prev) => ({ ...prev, selected_scenario: scenarioId }))
-                      }
-                    >
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                          <span className="badge badge-crimson">{def.code} · {def.severity}</span>
-                          <span className="mono" style={{ fontSize: '0.75rem', color: '#475569' }}>
-                            {def.sigmaRule.id}
-                          </span>
-                        </div>
-                        <h3 style={{ margin: '10px 0 6px', fontSize: '0.96rem', color: '#0f172a' }}>
-                          {def.title}
-                        </h3>
-                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
-                          {def.description}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-dark'}`}
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleInjectTelemetry(scenarioId, state.auto_remediate);
+              <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {/* Metrics & Auto-Remediate Strip */}
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-canvas)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '13.5px' }}>
+                    <span>
+                      Incident:{' '}
+                      <strong className="mono">{state.incident_id || 'Pending'}</strong>
+                    </span>
+                    <span>
+                      Risk Score:{' '}
+                      <strong
+                        style={{
+                          color:
+                            state.risk_score >= 80
+                              ? 'var(--accent-crimson)'
+                              : 'var(--accent-emerald)'
                         }}
                       >
-                        <Play size={13} />
-                        <span>Inject {def.code} Telemetry</span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                        {state.risk_score}/100
+                      </strong>
+                    </span>
+                    <span>
+                      MTTD: <strong>{state.mttd_ms !== null ? `${state.mttd_ms}ms` : '—'}</strong>
+                    </span>
+                    <span>
+                      MTTR: <strong>{state.mttr_ms !== null ? `${state.mttr_ms}ms` : 'Pending'}</strong>
+                    </span>
+                  </div>
 
-              {/* Live Ingested Telemetry & Sigma Match */}
-              {state.matched_sigma && (
-                <div className="grid-2" style={{ marginTop: '18px', gap: '16px' }}>
-                  <div className="surface-card" style={{ background: '#0f172a', color: '#e2e8f0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.86rem', color: '#93c5fd' }}>
-                        Matched Sigma Rule ({state.matched_sigma.id})
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${state.auto_remediate ? 'btn-emerald' : ''}`}
+                      style={{ fontSize: '13px', padding: '6px 12px' }}
+                      onClick={() =>
+                        setState((prev) => ({
+                          ...prev,
+                          auto_remediate: !prev.auto_remediate
+                        }))
+                      }
+                    >
+                      <ShieldCheck size={14} />
+                      <span>
+                        Auto-SOAR: {state.auto_remediate ? 'ON' : 'Manual'}
                       </span>
-                      <span className="badge badge-crimson">{state.matched_sigma.level.toUpperCase()}</span>
+                    </button>
+                    {state.incident_id && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ fontSize: '13px', padding: '6px 12px' }}
+                        onClick={handleDownloadReport}
+                      >
+                        <Download size={14} />
+                        <span>Export Report</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Table 1: SIEM Detection Queue */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '15.5px', fontWeight: 700, margin: 0 }}>
+                      SIEM Security Detections (Sigma Rules)
+                    </h2>
+                    <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      Inspect active alerts correlated from Okta, Cloudflare Edge WAF, and AWS CloudTrail telemetry.
+                    </p>
+                  </div>
+
+                  <div className="data-table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Alert &amp; Sigma Rule</th>
+                          <th>Severity</th>
+                          <th>Source IP / ASN</th>
+                          <th>Status</th>
+                          <th style={{ textAlign: 'right' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {SCENARIO_ORDER.map((scenarioId) => {
+                          const def = ATTACK_SCENARIOS[scenarioId];
+                          const isSelected = state.selected_scenario === scenarioId && state.incident_id !== null;
+                          const isBusy = busyKey === `ingest:${scenarioId}`;
+                          return (
+                            <tr
+                              key={scenarioId}
+                              className={isSelected ? 'selected-row' : undefined}
+                            >
+                              <td>
+                                <div style={{ fontWeight: 700, fontSize: '14px' }}>{def.title}</div>
+                                <div className="mono" style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                                  {def.sigmaRule.id} · {def.sigmaRule.mitre_attack}
+                                </div>
+                              </td>
+                              <td>
+                                <span
+                                  className={`badge ${
+                                    def.severity === 'CRITICAL' ? 'badge-crimson' : 'badge-amber'
+                                  }`}
+                                >
+                                  {def.severity}
+                                </span>
+                              </td>
+                              <td className="mono" style={{ fontSize: '13px' }}>
+                                {def.sourceIp} ({def.asn})
+                              </td>
+                              <td>
+                                {isSelected ? (
+                                  state.incident_status === 'CONTAINED' ? (
+                                    <span className="badge badge-emerald">CONTAINED</span>
+                                  ) : (
+                                    <span className="badge badge-crimson">ACTIVE</span>
+                                  )
+                                ) : (
+                                  <span className="badge">QUEUED</span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  style={{ fontSize: '13px', padding: '6px 12px' }}
+                                  disabled={busyKey !== null}
+                                  onClick={() =>
+                                    void handleIngestScenario(scenarioId, state.auto_remediate)
+                                  }
+                                >
+                                  {isBusy ? 'Ingesting…' : isSelected ? 'Re-Correlate' : 'Triage Alert'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Table 2: SOAR Containment Playbooks */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '15.5px', fontWeight: 700, margin: 0 }}>
+                      SOAR Containment Playbooks
+                    </h2>
+                    <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      Dispatch automated containment webhooks to revoke sessions, block source networks, or quarantine workloads.
+                    </p>
+                  </div>
+
+                  <div className="data-table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Playbook</th>
+                          <th>Target Endpoint</th>
+                          <th>Status</th>
+                          <th style={{ textAlign: 'right' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {PLAYBOOK_ORDER.map((actionId) => {
+                          const playbook = SOAR_PLAYBOOKS[actionId];
+                          const executed = state.executed_actions.includes(actionId);
+                          const isBusy = busyKey === `contain:${actionId}`;
+                          return (
+                            <tr key={actionId}>
+                              <td>
+                                <div style={{ fontWeight: 700, fontSize: '14px' }}>{playbook.title}</div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                  {playbook.description}
+                                </div>
+                              </td>
+                              <td className="mono" style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                                {playbook.webhookTarget}
+                              </td>
+                              <td>
+                                {executed ? (
+                                  <span className="badge badge-emerald">{playbook.badgeText}</span>
+                                ) : (
+                                  <span className="badge">READY</span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                <button
+                                  type="button"
+                                  className={`btn btn-sm ${executed ? '' : 'btn-primary'}`}
+                                  style={{ fontSize: '13px', padding: '6px 12px' }}
+                                  disabled={busyKey !== null || executed}
+                                  onClick={() => void handleExecuteContainment(actionId)}
+                                >
+                                  {isBusy ? 'Dispatching…' : executed ? 'Executed' : 'Run Playbook'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Matched Sigma Rule Preview */}
+                {state.matched_sigma && (
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      Matched Detection Rule ({state.matched_sigma.id})
                     </div>
                     <pre
                       className="mono"
                       style={{
                         margin: 0,
-                        fontSize: '0.74rem',
-                        lineHeight: 1.5,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word'
+                        padding: '12px 14px',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: 'var(--bg-canvas)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '13px',
+                        lineHeight: 1.55,
+                        overflowX: 'auto',
+                        color: 'var(--text-primary)'
                       }}
                     >
                       {state.matched_sigma.yaml}
                     </pre>
                   </div>
-
-                  <div className="surface-card" style={{ background: '#f8fafc' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.86rem', color: '#0f172a' }}>
-                        Normalized Telemetry Stream ({state.telemetry_events.length} events)
-                      </span>
-                      <span className="badge badge-amber">MTTD {state.mttd_ms}ms</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {state.telemetry_events.map((evt) => (
-                        <div
-                          key={evt.event_id}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '8px',
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            fontSize: '0.76rem'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                            <span className="mono">{evt.source}</span>
-                            <span className="mono">HTTP {evt.http_status} · {evt.geo}</span>
-                          </div>
-                          <div className="mono" style={{ color: '#475569', marginTop: '4px', wordBreak: 'break-word' }}>
-                            {evt.source_ip} ({evt.asn}) → {evt.resource}
-                          </div>
-                          <div className="mono" style={{ color: '#b91c1c', marginTop: '2px', wordBreak: 'break-word' }}>
-                            {evt.raw_indicator}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                <button type="button" className="btn btn-sm" onClick={() => handleSetPhase(1)}>
-                  Back to Discovery
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleSetPhase(3)}
-                >
-                  <span>Proceed to Phase 3: SOAR Containment</span>
-                  <ArrowRight size={15} />
-                </button>
+                )}
               </div>
             </section>
-          )}
-
-          {/* PHASE 3: PRACTICE (2-Seat War Room) */}
-          {state.active_phase === 3 && (
-            <SoarWarRoomPractice
-              state={state}
-              activeScenarioDef={activeScenarioDef}
-              busy={busy}
-              probeResult={probeResult}
-              onInjectTelemetry={(scenario, autoRemediate) =>
-                void handleInjectTelemetry(scenario, autoRemediate)
-              }
-              onExecuteContainment={(action) => void handleExecuteContainment(action)}
-              onSelectSeat={handleSelectSeat}
-              onProbeUserAccess={handleProbeUserAccess}
-              onSetPhase={handleSetPhase}
-            />
-          )}
-
-          {/* PHASE 4: REFLECTION */}
-          {state.active_phase === 4 && (
-            <SoarReflectionSection
-              state={state}
-              activeScenarioDef={activeScenarioDef}
-              copiedNotice={copiedNotice}
-              onSetPhase={handleSetPhase}
-              onCopyReport={handleCopyReport}
-              onDownloadReport={handleDownloadReport}
-            />
           )}
         </div>
       </main>
 
-      {/* Sticky Bottom X-Ray Telemetry Drawer */}
+      {/* 3. Sticky-Bottom X-Ray Telemetry Drawer */}
       <XRayTelemetryDrawer
         spans={spans}
         decodedProofSections={decodedProofSections}

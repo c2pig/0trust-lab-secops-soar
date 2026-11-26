@@ -2,7 +2,7 @@
 
 > **Zoom Level:** 2.5 (Lab Assembly + Infrastructure Mapping)  
 > **Parent Overview:** [`0trust.dev/docs/ARCHITECTURE.md`](https://github.com/c2pig/0trust.dev/blob/main/docs/ARCHITECTURE.md)  
-> **Experience Archetype:** Archetype B — 2-Seat Incident War Room (`Target Identity · Compromised Session` ↔ `SOC Tier 2 · Detection & SOAR`)  
+> **Experience Archetype:** Role-Specific AppShell (`Employee` ↔ `Security Ops`) with `driver.js` Orientation Overlay  
 > **Hosting Split:** Static SPA (`dist/`) on **Cloudflare Pages** + API (`/api/secops-soar/*`) on **GCP Cloud Run** (`0trust-lab-secops-soar`, `min_instance_count = 0`) fronted by `0trust-lab-router`  
 > **State Backend:** **Firestore Native** (`kv_state` collection, doc ID `secops-soar:<encodeURIComponent(key)>`, `lab6:soar:` prefix, `1h` TTL with synchronous `expireAt` enforcement; `MemoryKvAdapter` local fallback)  
 > **Architecture SVG:** [`docs/diagrams/secops_soar_architecture.svg`](diagrams/secops_soar_architecture.svg)
@@ -13,9 +13,9 @@
 
 ```mermaid
 flowchart TB
-    subgraph Seats ["Archetype B: 2-Seat Incident War Room (RoleSwitcherBar.tsx)"]
-        User["Seat 1: Tyler Brooks (Target Identity · Compromised Session)"]
-        SOC["Seat 2: Amina Diallo (SOC Tier 2 · Detection & SOAR)"]
+    subgraph Seats ["AppShell Dropdown Role Switcher (RoleSwitcherBar.tsx · driver.js Tour)"]
+        User["Seat 1: Tyler Brooks (Employee · Workforce SaaS Portal)"]
+        SOC["Seat 2: Amina Diallo (Security Ops · Incident & SOAR Containment Console)"]
     end
 
     subgraph Edge ["Same-Origin Routing (https://lab.0trust.dev/secops-soar)"]
@@ -65,8 +65,8 @@ flowchart TB
 | :--- | :--- | :--- | :--- |
 | **Static SPA Delivery** | Serve React SPA (`dist/`) on `https://lab.0trust.dev/secops-soar` (local Vite port `5181`) | [`0trust-lab-secops-soar`](https://github.com/c2pig/0trust-lab-secops-soar) (`src/`, `vite.config.ts`) | `managed-infrastructure/modules/cloudflare-pages-lab` (`enable_custom_domain = false`, behind `0trust-lab-router`) |
 | **Phase 1–2 (Discovery & Understanding · Seat 2 SOC)**: Telemetry & Sigma Matcher | Inject Credential Stuffing (`6A`), Impossible Travel (`6B`), or Public Bucket + Canary (`6C`) and match Sigma rules | [`0trust-lab-secops-soar`](https://github.com/c2pig/0trust-lab-secops-soar) (`server/app.ts` → synced `server/runtime.ts`, `functions/api/secops-soar/ingest.ts`, canonical `Dockerfile`) | `managed-infrastructure/modules/cloud-run-lab` (`0trust-lab-secops-soar`, `min_instance_count = 0`, WIF OIDC deploy) |
-| **Phase 3 (Practice · Seat 2 SOC ↔ Seat 1 Target)**: SOAR Containment & Verification | Execute `WAF_BLOCK_ASN`, `CAEP_UNIVERSAL_LOGOUT`, or `AGENT_KILL_SWITCH` and verify target seat revocation (`401`/`403`/`423`) | [`0trust-lab-secops-soar`](https://github.com/c2pig/0trust-lab-secops-soar) (`src/components/secops-soar/SoarWarRoomPractice.tsx`, `functions/api/secops-soar/contain.ts`, `server/kvAdapter.ts`) | **Firestore Native** (`kv_state` collection, `secops-soar:lab6%3Asoar%3A<sessionId>`, `1h TTL` + synchronous `expireAt` check) |
-| **Phase 4 (Reflection)**: MTTD/MTTR Timeline & Sticky X-Ray Drawer | Compare Manual vs. Auto-Remediate MTTR, export post-incident JSON, and inspect W3C `traceparent` + Sigma/CAEP proofs | [`0trust-lab-secops-soar`](https://github.com/c2pig/0trust-lab-secops-soar) (`src/components/secops-soar/SoarReflectionSection.tsx`, `src/components/XRayTelemetryDrawer.tsx`, `functions/api/_middleware.ts`, `functions/api/_telemetry.ts`) | `$0.00` Guided Sandbox + Cloud Run OTLP Trace Context (`_middleware.ts` + `_telemetry.ts`) |
+| **Workforce SaaS Portal & SOAR Containment (`Employee` ↔ `Security Ops`)** | Execute `WAF_BLOCK_ASN`, `CAEP_UNIVERSAL_LOGOUT`, or `AGENT_KILL_SWITCH` and verify target seat revocation (`401`/`403`/`423`) | [`0trust-lab-secops-soar`](https://github.com/c2pig/0trust-lab-secops-soar) (`src/pages/SecopsSoarPage.tsx`, `functions/api/secops-soar/contain.ts`, `server/kvAdapter.ts`) | **Firestore Native** (`kv_state` collection, `secops-soar:lab6%3Asoar%3A<sessionId>`, `1h TTL` + synchronous `expireAt` check) |
+| **Telemetry & Sticky X-Ray Drawer** | Compare Manual vs. Auto-Remediate MTTR, export post-incident JSON, and inspect W3C `traceparent` + Sigma/CAEP proofs | [`0trust-lab-secops-soar`](https://github.com/c2pig/0trust-lab-secops-soar) (`src/pages/SecopsSoarPage.tsx`, `src/components/XRayTelemetryDrawer.tsx`, `functions/api/_middleware.ts`, `functions/api/_telemetry.ts`) | `$0.00` Guided Sandbox + Cloud Run OTLP Trace Context (`_middleware.ts` + `_telemetry.ts`) |
 
 ---
 
