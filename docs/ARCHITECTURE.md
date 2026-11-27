@@ -74,16 +74,16 @@ flowchart TB
 
 1. **Direct Origin Protection & Health Probe (`server/app.ts` → synced `server/runtime.ts`)**:
    - `server/app.ts` is a thin route wrapper delegating to `createBaseLabApp` in the canonical synced `server/runtime.ts` (synced from `0trust.dev/templates/lab-runtime/` alongside `server/kvAdapter.ts`, `server/origin.ts`, `server/index.ts`, and the canonical multi-stage `Dockerfile`).
-   - All `/api/*` routes enforce fail-closed constant-time `X-Lab-Router-Secret` validation (`403 FORBIDDEN_DIRECT_ORIGIN` on direct `*.run.app` access).
+   - All `/api/*` routes enforce fail-closed `LAB_ROUTER_SECRET` validation using SHA-256 `crypto.timingSafeEqual` on `X-Lab-Router-Secret` (`403 FORBIDDEN_DIRECT_ORIGIN` on direct `*.run.app` access), with dev-only localhost origin fallback (`server/origin.ts`) and bounded OTLP flush + `closeIdleConnections()` on shutdown (`server/index.ts`).
    - `GET /healthz` is exempt from `X-Lab-Router-Secret` and returns `200 { ok: true, lab: "secops-soar" }` without accessing Firestore or secrets.
 2. **Strict Enum & Payload Validation**:
    - `POST /api/secops-soar/ingest` validates `scenario` against `Set(['CREDENTIAL_STUFFING', 'IMPOSSIBLE_TRAVEL', 'PUBLIC_BUCKET_CANARY'])` and enforces `MAX_BODY_BYTES = 65536`.
    - `POST /api/secops-soar/contain` validates `action` against `Set(['WAF_BLOCK_ASN', 'CAEP_UNIVERSAL_LOGOUT', 'AGENT_KILL_SWITCH'])`.
 3. **Session Isolation & Synchronous TTL (`server/kvAdapter.ts`)**:
-   - State is scoped to `secops-soar:lab6%3Asoar%3A<sanitizeSessionId>` with `expirationTtl: 3600` (`expireAt` Firestore Timestamp) and synchronous expiry checks (`expireAt.toMillis() <= Date.now()` -> `null`), plus `Cache-Control: no-store`.
+   - State is scoped to `secops-soar:lab6%3Asoar%3A<sanitizeSessionId>` with `expirationTtl: 3600` (`expireAt` Firestore Timestamp) and synchronous expiry checks (`expireAt?.toMillis()` guard `<= Date.now()` -> `null`), plus `Cache-Control: no-store`.
 4. **Immediate CAEP Session Revocation & Telemetry Redaction**:
    - Executing `CAEP_UNIVERSAL_LOGOUT` flips `compromised_user_revoked = true`, updates Tyler Brooks's seat badge to `Session Revoked`, and blocks simulated cloud app probes with `401 CAEP_SESSION_REVOKED`.
-   - `_middleware.ts` and `_telemetry.ts` preserve W3C `traceparent`, set `X-Edge-Latency-Ms`, redact JWT signatures in `_telemetry`, never emit `X-Lab-Router-Secret` or `OTLP_AUTH_HEADER`, and export non-blocking OTLP `/v1/traces` + `/v1/logs` with `OTEL_SERVICE_NAME=zerotrust-lab-secops-soar` authenticated via GCP Secret Manager `grafana-otlp-auth-header` (`OTLP_AUTH_HEADER`). `XRayTelemetryDrawer.tsx` includes a `Global Live Dashboard ↗` link to `https://0trust.dev/observability`.
+   - `_middleware.ts` and `_telemetry.ts` preserve W3C `traceparent`, set `X-Edge-Latency-Ms`, handle null-body responses and error telemetry, strip sensitive headers, redact auth tokens/JWT signatures in `_telemetry`, never emit `X-Lab-Router-Secret` or `OTLP_AUTH_HEADER`, and export non-blocking OTLP `/v1/traces` + `/v1/logs` with `OTEL_SERVICE_NAME=zerotrust-lab-secops-soar` authenticated via GCP Secret Manager `grafana-otlp-auth-header` (`OTLP_AUTH_HEADER`). `XRayTelemetryDrawer.tsx` includes a `Global Live Dashboard ↗` link to `https://0trust.dev/observability`.
 5. **Terraform Remote State (`infra/terraform/backend.tf`)**:
    - Remote GCS state is declared with `bucket = "0trust-dev-tfstate"` and `prefix = "labs/secops-soar"`, with `.terraform/` and `*.tfstate*` gitignored. Operators migrating from local state should provision the GCS bucket once (Uniform Bucket-Level Access, versioning enabled, `public_access_prevention = "enforced"`) and run `terraform init -migrate-state`.
 
