@@ -363,4 +363,65 @@ describe('Lab 6 (secops-soar) Cloud Run Adapter — Red-Team & Security Invarian
     assert.equal(state.incident_status, 'CONTAINED');
     assert.equal(state.compromised_user_revoked, true);
   });
+
+  it('rejects >64KB JSON body with 413 PAYLOAD_TOO_LARGE and malformed JSON with 400 INVALID_JSON', async () => {
+    const app = createCloudRunApp({
+      env: {
+        ENVIRONMENT: 'production',
+        LAB_SLUG: 'secops-soar',
+        LAB_ROUTER_SECRET: TEST_ROUTER_SECRET
+      },
+      kv: new MemoryKvAdapter({ labSlug: 'secops-soar' })
+    });
+
+    const oversizedBody = JSON.stringify({
+      scenario: 'IMPOSSIBLE_TRAVEL',
+      padding: 'x'.repeat(65 * 1024)
+    });
+
+    const res413 = await app.request(
+      'https://0trust-lab-secops-soar-abc.run.app/api/secops-soar/ingest',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-lab-router-secret': TEST_ROUTER_SECRET
+        },
+        body: oversizedBody
+      }
+    );
+    assert.equal(res413.status, 413);
+    const body413 = (await res413.json()) as { error: string };
+    assert.equal(body413.error, 'PAYLOAD_TOO_LARGE');
+
+    const res400 = await app.request(
+      'https://0trust-lab-secops-soar-abc.run.app/api/secops-soar/ingest',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-lab-router-secret': TEST_ROUTER_SECRET
+        },
+        body: '{"scenario": "IMPOSSIBLE_TRAVEL"'
+      }
+    );
+    assert.equal(res400.status, 400);
+    const body400 = (await res400.json()) as { error: string };
+    assert.equal(body400.error, 'INVALID_JSON');
+
+    const resMissingAction = await app.request(
+      'https://0trust-lab-secops-soar-abc.run.app/api/secops-soar/contain',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-lab-router-secret': TEST_ROUTER_SECRET
+        },
+        body: JSON.stringify({ sessionId: 'test-session' })
+      }
+    );
+    assert.equal(resMissingAction.status, 400);
+    const bodyMissingAction = (await resMissingAction.json()) as { error: string };
+    assert.equal(bodyMissingAction.error, 'INVALID_ACTION');
+  });
 });

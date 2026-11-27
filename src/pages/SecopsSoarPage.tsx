@@ -18,6 +18,10 @@ import {
   exportPostIncidentReport,
   ingestAttackTelemetry
 } from '../engine/secopsSoarEngine';
+import {
+  selectGlobalStatusLabel,
+  selectSeatNotifications
+} from '../engine/secopsSoarSelectors';
 import { RoleSeatItem, RoleSwitcherBar } from '../components/RoleSwitcherBar';
 import {
   XRayDecodedProofSection,
@@ -318,16 +322,11 @@ export const SecopsSoarPage: React.FC<SecopsSoarPageProps> = ({ onBack }) => {
     URL.revokeObjectURL(url);
   }, []);
 
-  const globalStatusLabel =
-    state.incident_status === 'CONTAINED'
-      ? 'Incident Contained'
-      : state.incident_status === 'ACTIVE_INCIDENT'
-        ? 'Active Incident'
-        : 'Monitoring';
+  const globalStatusLabel = selectGlobalStatusLabel(state);
 
   const seats: RoleSeatItem<SecopsSoarSeatId>[] = useMemo(() => {
-    const employeeUpdated = state.incident_status === 'CONTAINED' && !verifiedAfterContain;
-    const socAlertActive = state.incident_status === 'ACTIVE_INCIDENT';
+    const { employeeUpdated, socAlertActive, employeeBadgeText } =
+      selectSeatNotifications(state, verifiedAfterContain);
 
     return [
       {
@@ -336,13 +335,14 @@ export const SecopsSoarPage: React.FC<SecopsSoarPageProps> = ({ onBack }) => {
         roleLabel: 'Employee',
         appLabel: 'Workforce SaaS Portal',
         avatarInitials: 'TB',
-        badge: employeeUpdated
-          ? {
-              text: state.compromised_user_revoked ? 'Session Revoked' : 'Access Contained',
-              tone: 'amber',
-              pulse: true
-            }
-          : null
+        badge:
+          employeeUpdated && employeeBadgeText
+            ? {
+                text: employeeBadgeText,
+                tone: 'amber',
+                pulse: true
+              }
+            : null
       },
       {
         id: 'soc-analyst',

@@ -180,9 +180,12 @@ function buildTimeline(
 }
 
 function shouldUseEdgeApi(): boolean {
-  if (typeof window === 'undefined') return false;
-  if (import.meta.env?.DEV) return false;
-  if (window.location.port === '5181' || window.location.port === '4181') return false;
+  const g = globalThis as { window?: { location?: { port?: string } } };
+  if (!g.window) return false;
+  const meta = import.meta as { env?: { DEV?: boolean } };
+  if (meta.env?.DEV) return false;
+  const port = g.window.location?.port;
+  if (port === '5181' || port === '4181') return false;
   return true;
 }
 
