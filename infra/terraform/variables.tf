@@ -27,7 +27,7 @@ variable "gcp_region" {
 
 variable "cloud_run_image" {
   type        = string
-  description = "Container image URI in Artifact Registry (e.g. us-central1-docker.pkg.dev/<project>/0trust-labs/secops-soar:latest)."
+  description = "Container image URI in Artifact Registry (e.g. us-central1-docker.pkg.dev/<project>/zerotrust-labs/secops-soar:latest)."
 }
 
 variable "firestore_collection" {
@@ -63,5 +63,5 @@ variable "otlp_endpoint" {
 variable "otlp_auth_header_secret_id" {
   type        = string
   default     = ""
-  description = "Optional GCP Secret Manager secret ID for OTLP_AUTH_HEADER (e.g. otlp-auth-header)."
+  description = "Optional GCP Secret Manager secret ID for OTLP_AUTH_HEADER (e.g. grafana-otlp-auth-header)."
 }
