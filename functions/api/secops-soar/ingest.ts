@@ -49,13 +49,32 @@ export interface SecopsSessionKvRecord {
 
 const MAX_BODY_BYTES = 64 * 1024;
 const KV_TTL_SECONDS = 3600;
+const MAX_EPHEMERAL_ENTRIES = 256;
+const EPHEMERAL_TTL_MS = KV_TTL_SECONDS * 1000;
 const VALID_SCENARIOS = new Set<AttackScenarioId>([
   'CREDENTIAL_STUFFING',
   'IMPOSSIBLE_TRAVEL',
   'PUBLIC_BUCKET_CANARY'
 ]);
 
-const ephemeralSecopsStore = new Map<string, SecopsSessionKvRecord>();
+const ephemeralSecopsStore = new Map<
+  string,
+  { record: SecopsSessionKvRecord; expiresAt: number }
+>();
+
+function setEphemeralSecops(key: string, record: SecopsSessionKvRecord): void {
+  const now = Date.now();
+  for (const [k, v] of ephemeralSecopsStore) {
+    if (now > v.expiresAt) ephemeralSecopsStore.delete(k);
+  }
+  if (ephemeralSecopsStore.has(key)) ephemeralSecopsStore.delete(key);
+  while (ephemeralSecopsStore.size >= MAX_EPHEMERAL_ENTRIES) {
+    const oldest = ephemeralSecopsStore.keys().next().value;
+    if (oldest === undefined) break;
+    ephemeralSecopsStore.delete(oldest);
+  }
+  ephemeralSecopsStore.set(key, { record, expiresAt: now + EPHEMERAL_TTL_MS });
+}
 
 const SCENARIO_META: Record<
   AttackScenarioId,
@@ -182,7 +201,7 @@ export async function onRequestPost(context: {
       expirationTtl: KV_TTL_SECONDS
     });
   } else {
-    ephemeralSecopsStore.set(kvKey, record);
+    setEphemeralSecops(kvKey, record);
   }
 
   return jsonResponse({

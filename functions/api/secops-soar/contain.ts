@@ -20,13 +20,42 @@ interface ContainRequest {
 
 const MAX_BODY_BYTES = 64 * 1024;
 const KV_TTL_SECONDS = 3600;
+const MAX_EPHEMERAL_ENTRIES = 256;
+const EPHEMERAL_TTL_MS = KV_TTL_SECONDS * 1000;
 const VALID_ACTIONS = new Set<SoarActionId>([
   'WAF_BLOCK_ASN',
   'CAEP_UNIVERSAL_LOGOUT',
   'AGENT_KILL_SWITCH'
 ]);
 
-const ephemeralContainStore = new Map<string, SecopsSessionKvRecord>();
+const ephemeralContainStore = new Map<
+  string,
+  { record: SecopsSessionKvRecord; expiresAt: number }
+>();
+
+function getEphemeralContain(key: string): SecopsSessionKvRecord | null {
+  const entry = ephemeralContainStore.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    ephemeralContainStore.delete(key);
+    return null;
+  }
+  return entry.record;
+}
+
+function setEphemeralContain(key: string, record: SecopsSessionKvRecord): void {
+  const now = Date.now();
+  for (const [k, v] of ephemeralContainStore) {
+    if (now > v.expiresAt) ephemeralContainStore.delete(k);
+  }
+  if (ephemeralContainStore.has(key)) ephemeralContainStore.delete(key);
+  while (ephemeralContainStore.size >= MAX_EPHEMERAL_ENTRIES) {
+    const oldest = ephemeralContainStore.keys().next().value;
+    if (oldest === undefined) break;
+    ephemeralContainStore.delete(oldest);
+  }
+  ephemeralContainStore.set(key, { record, expiresAt: now + EPHEMERAL_TTL_MS });
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -90,7 +119,7 @@ export async function onRequestPost(context: {
       existing = null;
     }
   } else {
-    existing = ephemeralContainStore.get(kvKey) || null;
+    existing = getEphemeralContain(kvKey);
   }
 
   const prevActions = existing?.executed_actions ?? [];
@@ -133,7 +162,7 @@ export async function onRequestPost(context: {
       expirationTtl: KV_TTL_SECONDS
     });
   } else {
-    ephemeralContainStore.set(kvKey, record);
+    setEphemeralContain(kvKey, record);
   }
 
   return jsonResponse({
