@@ -108,3 +108,5 @@ flowchart TB
   - **Layer 1 (`tests/server.test.ts`)**: Cloud Run adapter security invariants (`X-Lab-Router-Secret`, `X-Forwarded-Host`, TTL expiry, JWT redaction, `413 PAYLOAD_TOO_LARGE`, `400 INVALID_JSON` / `INVALID_ACTION`).
   - **Layer 2 (`tests/api.test.ts`)**: Direct `MemoryKvAdapter` integration tests for `functions/api/secops-soar/{ingest,contain}.ts` (Sigma rule matching, SOAR containment idempotency & `mttr_ms` preservation, session isolation).
   - **Layer 3 (`tests/engine.test.ts`, `tests/selectors.test.ts`)**: Pure DOM-free UI selectors (`selectGlobalStatusLabel`, `selectSeatNotifications`, `selectContainmentActionGates`) extracted from `src/pages/SecopsSoarPage.tsx` into `src/engine/secopsSoarSelectors.ts` and engine unit tests.
+
+- **Lease-Boundary Lifecycle (`LabLeaseGuard`)**: Synced `src/components/LabLeaseGuard.tsx` with `onLeaseEnded?: () => void` callback invoked on **End Lab** (`handleRelease()`) and lease expiry transitions.
