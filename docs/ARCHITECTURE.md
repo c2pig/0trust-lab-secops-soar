@@ -103,3 +103,8 @@ flowchart TB
 - **CI & Deploy Gating**: Added `.github/workflows/ci.yml` (`pull_request` -> `main` running `npm ci`, `tsc --noEmit`, `tsc -p tsconfig.server.json --noEmit`, `npm test`, `npm run build`) and gated both `deploy-pages` and `deploy-cloudrun` in `.github/workflows/deploy.yml` on `needs: test-and-build`.
 
 - **X-Ray Telemetry Drawer Theme**: Uses Chrome DevTools Light Mode palette (`#ffffff` / `#f1f3f4` surfaces, `#dadce0` borders, `#202124` / `#5f6368` text, `#1a73e8` active indicators) for high-contrast readability.
+
+- **3-Layer Unit Testing & Pure UI Selectors (`tests/{server,api,engine,selectors}.test.ts`, `src/engine/secopsSoarSelectors.ts`)**:
+  - **Layer 1 (`tests/server.test.ts`)**: Cloud Run adapter security invariants (`X-Lab-Router-Secret`, `X-Forwarded-Host`, TTL expiry, JWT redaction, `413 PAYLOAD_TOO_LARGE`, `400 INVALID_JSON` / `INVALID_ACTION`).
+  - **Layer 2 (`tests/api.test.ts`)**: Direct `MemoryKvAdapter` integration tests for `functions/api/secops-soar/{ingest,contain}.ts` (Sigma rule matching, SOAR containment idempotency & `mttr_ms` preservation, session isolation).
+  - **Layer 3 (`tests/engine.test.ts`, `tests/selectors.test.ts`)**: Pure DOM-free UI selectors (`selectGlobalStatusLabel`, `selectSeatNotifications`, `selectContainmentActionGates`) extracted from `src/pages/SecopsSoarPage.tsx` into `src/engine/secopsSoarSelectors.ts` and engine unit tests.
