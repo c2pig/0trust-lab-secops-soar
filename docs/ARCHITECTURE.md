@@ -86,3 +86,10 @@ flowchart TB
    - `_middleware.ts` and `_telemetry.ts` preserve W3C `traceparent`, set `X-Edge-Latency-Ms`, redact JWT signatures in `_telemetry`, never emit `X-Lab-Router-Secret` or `OTLP_AUTH_HEADER`, and export non-blocking OTLP `/v1/traces` + `/v1/logs` with `OTEL_SERVICE_NAME=zerotrust-lab-secops-soar` authenticated via GCP Secret Manager `grafana-otlp-auth-header` (`OTLP_AUTH_HEADER`). `XRayTelemetryDrawer.tsx` includes a `Global Live Dashboard ↗` link to `https://0trust.dev/observability`.
 5. **Terraform Remote State (`infra/terraform/backend.tf`)**:
    - Remote GCS state is declared with `bucket = "0trust-dev-tfstate"` and `prefix = "labs/secops-soar"`, with `.terraform/` and `*.tfstate*` gitignored. Operators migrating from local state should provision the GCS bucket once (Uniform Bucket-Level Access, versioning enabled, `public_access_prevention = "enforced"`) and run `terraform init -migrate-state`.
+
+---
+
+## Turnstile & 3-Minute Single-Session Lease Gate
+- **Frontend Guard (`src/components/LabLeaseGuard.tsx`, re-exported via `src/shell/index.ts`)**: `src/App.tsx` wraps `<SecopsSoarPage>` with `<LabLeaseGuard labSlug="secops-soar" labTitle="Live SecOps Detection & Automated SOAR">`.
+- **Edge Enforcement (`0trust-lab-router` + `LabLeaseDO`)**: Queries `GET /api/lease/secops-soar/status`, renders the explicit Cloudflare Turnstile widget (`0x4AAAAAAGVF1oWC5CsFWn-J`) when available, acquires an `HttpOnly; Secure; SameSite=Lax` lease cookie (`lab_lease_secops-soar`) via `POST /api/lease/secops-soar/acquire` (180s hard cap, 25 calls/lease, 200 calls/UTC day), shows a countdown lock screen when occupied, and exposes a floating `MM:SS + End Lab` pill while active.
+- **Zero Engine Changes**: All existing same-origin `/api/secops-soar/*` requests carry the `HttpOnly` lease cookie automatically; local development (`localhost` / `127.0.0.1`) and disabled lease configs pass through transparently.
